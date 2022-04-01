@@ -97,7 +97,7 @@ async function filter() {
     filterData = filterData.map((e) => {
       let amount = Math.round(state.total / e.value);
       amount = amount - (amount % 10);
-      e.amount = amount;
+      e.amount = amount?amount:0;
       e.pool = state.type;
       return e;
     });
@@ -118,10 +118,10 @@ async function mapData() {
   );
   let sum = 0;
   filterData.forEach((c) => {
-    sum += c;
+    sum += c.amount;
   });
   // @ts-ignore
-  document.querySelector("tbody").innerHTML = tableBody;
+  document.querySelector("tbody").innerHTML = tableBody.join("");
 
   const filterDiv = document.getElementById("filter");
   filterDiv.querySelector('input[name="sum"]').value = sum;
