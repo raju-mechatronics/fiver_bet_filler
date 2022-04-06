@@ -46,7 +46,23 @@ function isFCT() {
 }
 
 async function addSingleBet({ combo, amount, pool }) {
+  if (pool === "fct" && !isFCT()) {
+    goToFCT();
+    await wait(2000);
+  }
+
+  if (pool !== "fct" && isFCT()) {
+    goToQin();
+    await wait(2000);
+  }
+
   if (isFCT()) {
+    if (!setComboFCT(combo)) return;
+    setTypeSingle();
+    setAmount(amount);
+    await wait(10);
+    add2Form();
+    return;
   }
 
   if (!setCombo(combo)) return;
@@ -111,4 +127,35 @@ if (!location.ancestorOrigins.contains(extensionOrigin)) {
     "position:fixed;top:0;right:0;display:block;" +
     "width:680px;height:100%;z-index:1000;";
   document.body.appendChild(iframe);
+}
+
+function setComboFCT(combo) {
+  const Checkbox1 = document.querySelectorAll(".bankerCheckbox input");
+  const Checkbox2 = document.querySelectorAll(".legCheckbox input");
+  const combos = combo.split("-").map((e) => Number(e) - 1);
+  if (Checkbox1[combos[0]].disabled) {
+    return false;
+  }
+  if (Checkbox2[combos[1]].disabled) {
+    return false;
+  }
+
+  Checkbox1[combos[0]].click();
+  Checkbox2[combos[1]].click();
+
+  return true;
+}
+
+function setTypeSingle(type) {
+  document.querySelector('input[value="S"]')?.click();
+}
+
+function goToFCT() {
+  document.querySelector("#oMenuODDS_FCT\\.ASPX").click();
+}
+
+function goToQin() {
+  document
+    .querySelector("#oMenuODDS_WPQ\\.ASPX\\,ODDS_WPQ_ALUP\\.ASPX")
+    .click();
 }

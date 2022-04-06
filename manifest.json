@@ -9,5 +9,18 @@
   },
   "action": {
     "default_popup": "popup.html"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://bet.hkjc.com/racing/pages/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {"resources": ["popup.html"],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
 }
