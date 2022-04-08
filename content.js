@@ -16,8 +16,11 @@ function add2Form() {
   document.querySelector(".rsAddBet").click();
 }
 
-function send() {
+async function send() {
   document.querySelector("#bsSendPreviewButton").click();
+  await waitFor("#PreviewSend");
+  document.querySelector("#PreviewSend").click();
+  await wait(200);
 }
 
 function setAmount(amount) {
@@ -45,38 +48,53 @@ function isFCT() {
   return !!location.pathname.includes("FCT");
 }
 
+function waitFor(selector) {
+  return new Promise((resolve) => {
+    let interval;
+    interval = setInterval(() => {
+      console.log("searching for", selector);
+      if (document.querySelector(selector)) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 500);
+  });
+}
+
 async function addSingleBet({ combo, amount, pool }) {
   if (pool === "fct" && !isFCT()) {
     goToFCT();
-    await wait(2000);
+    await waitFor('[for="fctS"]');
+    await wait(100);
   }
 
   if (pool !== "fct" && isFCT()) {
     goToQin();
-    await wait(2000);
+    await waitFor(".legCheckbox input");
+    await wait(100);
   }
 
-  if (isFCT()) {
+  if (pool === "fct") {
     if (!setComboFCT(combo)) return;
-    setTypeSingle();
-    setAmount(amount);
-    await wait(10);
-    add2Form();
-    return;
-  }
+    await wait(5);
 
-  if (!setCombo(combo)) return;
-  if (!setType(pool)) return;
-  setAmount(amount);
-  await wait(10);
-  add2Form();
+    setAmount(amount);
+    await wait(5);
+    add2Form();
+  } else {
+    if (!setCombo(combo)) return;
+    if (!setType(pool)) return;
+    setAmount(amount);
+    await wait(5);
+    add2Form();
+  }
 }
 
 async function fillForm(data) {
   console.log(data);
   for (const datum of data) {
     console.log(datum);
-    addSingleBet(datum);
+    await addSingleBet(datum);
     await wait(10);
   }
 }
@@ -86,11 +104,11 @@ async function fillBatchForm(data) {
   for (let i = 0; i < data.length; i++) {
     if (j == 29) {
       j = 0;
-      send();
-      await wait(1000);
+      await send();
+      await wait(100);
     }
-    addSingleBet(data[i]);
-    await wait(10);
+    await addSingleBet(data[i]);
+    await wait(2);
     j++;
   }
 }
@@ -99,10 +117,15 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
   if (req.message === "fillForm") {
     if (req.data.length > 30) {
       fillBatchForm(req.data);
-    } else fillForm(req.data);
+      sendResponse();
+    } else {
+      fillForm(req.data);
+      sendResponse();
+    }
   }
   if (req.message === "send") {
     send();
+    sendResponse();
   }
   if (req.message === "url") {
     console.log(document.url);
@@ -146,8 +169,8 @@ function setComboFCT(combo) {
   return true;
 }
 
-function setTypeSingle(type) {
-  document.querySelector('input[value="S"]')?.click();
+function setTypeSingle() {
+  document.querySelector("#fctS").click();
 }
 
 function goToFCT() {
@@ -159,3 +182,15 @@ function goToQin() {
     .querySelector("#oMenuODDS_WPQ\\.ASPX\\,ODDS_WPQ_ALUP\\.ASPX")
     .click();
 }
+let prevURL = document.URL;
+
+setInterval(function () {
+  if (prevURL === document.URL) return;
+  prevURL = document.URL;
+  const query = document.URL.split("?")[1].split("&");
+  let params = {};
+  query.forEach(function (e) {
+    params[e.split("=")[0]] = e.split("=")[1];
+  });
+  chrome.runtime.sendMessage({ message: "url", params });
+}, 300);

@@ -1,4 +1,12 @@
-let state = { type: "qin", threshold: "2.5", total: 1000, datatype: 0 };
+let state = {
+  type: "qin",
+  threshold: "2.5",
+  total: 1000,
+  datatype: ["0", "1"],
+  qin: 60,
+  fct: 80,
+};
+
 let filterData = [];
 
 async function getapiParamsfromPage() {
@@ -31,15 +39,23 @@ function getApiParams() {
 
 function getFilterParams() {
   const filterDiv = document.getElementById("filter");
-  const datatype = filterDiv?.querySelector('input[name="dataType"]').value;
+  let t = filterDiv?.querySelector('input[name="dataType"]').value;
+  t = t.split(",").filter((e) => e);
+  console.log(t);
+  let datatype = t;
   const total = filterDiv?.querySelector('input[name="total"]').value;
   const threshold = filterDiv?.querySelector('input[name="threshold"]').value;
+  const qin = document.getElementById("qin_filter").value;
+  const fct = document.getElementById("fct_filter").value;
 
-  state = { ...state, datatype, total, threshold };
+  state = { ...state, datatype, total, threshold, qin, fct };
+
   return {
     datatype,
     total,
     threshold,
+    qin,
+    fct,
   };
 }
 
@@ -104,16 +120,6 @@ async function getJSON(type) {
     e.pool = type ? type : state.type;
     return e;
   });
-  const typeset = [...new Set(data.map((e) => e.datatype))];
-  if (typeset.length) {
-    document.querySelector("#filterType").innerHTML = typeset
-      .map(
-        (e) =>
-          `<button class="btn btn-sm btn-light fw-bold px-3 mx-2">${e}</button>`
-      )
-      .join("\n");
-  }
-  console.log(typeset);
   state = { ...state, data };
   if (data.length > 0) {
     chrome.storage.local.set({ [hasher()]: data });
@@ -125,6 +131,18 @@ async function getJSON(type) {
   console.log(data);
   state = { ...state, data };
   return data;
+}
+
+function markSelectedBtn() {
+  let el = document.querySelector("#filterType").children;
+  for (let i = 0; i < el.length; i++) {
+    console.log(el[i].innerText, state.datatype.includes(el[i].innerText));
+    if (state.datatype.includes(el[i].innerText)) {
+      el[i].className = "btn bg-success";
+    } else {
+      el[i].className = "btn";
+    }
+  }
 }
 
 async function init() {
@@ -147,9 +165,8 @@ async function init() {
 
   const filterDiv = document.getElementById("filter");
 
-  filterDiv.querySelector('input[name="dataType"]').value = state.datatype
-    ? state.datatype
-    : 0;
+  filterDiv.querySelector('input[name="dataType"]').value =
+    state.datatype.join(",");
 
   filterDiv.querySelector('input[name="total"]').value = state.total
     ? state.total
@@ -158,8 +175,11 @@ async function init() {
   filterDiv.querySelector('input[name="threshold"]').value = state.threshold
     ? state.threshold
     : "";
+  document.querySelector("#qin_filter").value = state.qin;
+  document.querySelector("#fct_filter").value = state.fct;
 
   mapData();
+  markSelectedBtn();
 }
 
 async function filter() {
@@ -169,7 +189,13 @@ async function filter() {
     console.log(data);
     filterData = data.filter((e) => {
       if (!Number(e.value)) return false;
-      return e.datatype == state.datatype;
+      let typematch = state.datatype.includes(e.datatype);
+      let qinMatch = e.pool === "qin" && Number(e.value) <= Number(state.qin);
+      let fctMatch = e.pool === "fct" && Number(e.value) <= Number(state.fct);
+
+      console.log(e.pool, e.value, state.qin, state.fct);
+
+      return typematch && (qinMatch || fctMatch);
     });
     console.log(filterData);
     filterData = filterData.map((e) => {
@@ -256,25 +282,38 @@ document.getElementById("send").addEventListener("click", () => {
 
 document.querySelector("#filterType").addEventListener("click", (e) => {
   console.log(e);
-  if (e.target.nodeName === "BUTTON") state.datatype = e.target.innerText;
+  if (e.target.nodeName === "BUTTON") {
+    console.log(state.datatype.includes(e.target.innerText));
+    if (state.datatype.includes(e.target.innerText)) {
+      state.datatype = state.datatype.filter((h) => h !== e.target.innerText);
+    } else {
+      state.datatype = [...new Set([...state.datatype, e.target.innerText])];
+    }
+  }
   init();
 });
 
 init();
 
 document.getElementById("quick").addEventListener("click", async (event) => {
-  let d1 = await getJSON("qin");
-  let d2 = await getJSON("fct");
+  document.querySelector('[name="type"]').value = "qin";
+  let d1 = await getJSON();
+  document.querySelector('[name="type"]').value = "fct";
+  let d2 = await getJSON();
+  document.querySelector('[name="type"]').value = "qin";
   state.data = [...d1, ...d2];
-  console.log(state.data);
-  const typeset = [...new Set(state.data.map((e) => e.datatype))];
-  if (typeset.length) {
-    document.querySelector("#filterType").innerHTML = typeset
-      .map(
-        (e) =>
-          `<button class="btn btn-sm btn-light fw-bold px-3 mx-2">${e}</button>`
-      )
-      .join("\n");
-  }
   init();
 });
+
+chrome.runtime.onMessage.addListener((req, c, d) => {
+  console.log(req);
+  if (req.message === "url") {
+    state = { ...state, ...req.params };
+    init();
+  }
+  d();
+});
+
+async function wait(ms) {
+  return new Promise((res) => setTimeout(res, ms));
+}
