@@ -18,9 +18,12 @@ function add2Form() {
 
 async function send() {
   document.querySelector("#bsSendPreviewButton").click();
-  await waitFor("#PreviewSend");
-  document.querySelector("#PreviewSend").click();
+  await waitFor("#previewSend");
+  document.querySelector("#previewSend").click();
   await wait(200);
+  await waitFor("#replyClose", 3000);
+  document.querySelector("#replyClose").click();
+  await wait(2500);
 }
 
 function setAmount(amount) {
@@ -48,28 +51,47 @@ function isFCT() {
   return !!location.pathname.includes("FCT");
 }
 
-function waitFor(selector) {
+function isQIN() {
+  return !!location.pathname.includes("odds_wpq");
+}
+
+function waitFor(selector, ms) {
   return new Promise((resolve) => {
     let interval;
+    let t = 0;
     interval = setInterval(() => {
       console.log("searching for", selector);
-      if (document.querySelector(selector)) {
+      if (document.querySelector(selector) || t >= ms) {
         clearInterval(interval);
         resolve();
       }
+      t = t + 500;
     }, 500);
   });
 }
 
 async function addSingleBet({ combo, amount, pool }) {
+  let { raceno } = await chrome.storage.local.get("raceno");
+  const query = document.URL.split("?")[1].split("&");
+  let params = {};
+  query.forEach(function (e) {
+    params[e.split("=")[0]] = e.split("=")[1];
+  });
+  if (params.raceno !== raceno) {
+    document.getElementById(`raceSel${raceno}`)?.click();
+    await wait(2000);
+  }
+
   if (pool === "fct" && !isFCT()) {
     goToFCT();
+    console.log("fct click");
     await waitFor('[for="fctS"]');
     await wait(100);
   }
 
-  if (pool !== "fct" && isFCT()) {
+  if (pool === "qin" && !isQIN()) {
     goToQin();
+    console.log("qin click");
     await waitFor(".legCheckbox input");
     await wait(100);
   }
@@ -193,4 +215,4 @@ setInterval(function () {
     params[e.split("=")[0]] = e.split("=")[1];
   });
   chrome.runtime.sendMessage({ message: "url", params });
-}, 300);
+}, 500);

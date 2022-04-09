@@ -14,7 +14,12 @@ async function getapiParamsfromPage() {
   const tab = tabs[0];
   const response = await chrome.tabs.sendMessage(tab.id, { message: "url" });
   state = { ...state, ...response };
-  init();
+  chrome.storage.local.get(hasher()).then((data) => {
+    data = data[hasher()];
+    data = data?.length ? data : [];
+    state = { ...state, data };
+    init();
+  });
 }
 
 getapiParamsfromPage();
@@ -27,6 +32,7 @@ function getApiParams() {
   const type = apiParams?.querySelector('input[name="type"]').value;
 
   let params = { date, venue, raceno, type };
+  chrome.storage.local.set({ raceno });
   state = { ...state, ...params };
 
   return {
@@ -249,7 +255,12 @@ document.querySelectorAll("input").forEach((e) => {
   e.addEventListener("input", (ev) => {
     getApiParams();
     getFilterParams();
-    init();
+    chrome.storage.local.get(hasher()).then((data) => {
+      data = data[hasher()];
+      data = data?.length ? data : [];
+      state = { ...state, data };
+      init();
+    });
   });
 });
 
@@ -309,7 +320,12 @@ chrome.runtime.onMessage.addListener((req, c, d) => {
   console.log(req);
   if (req.message === "url") {
     state = { ...state, ...req.params };
-    init();
+    chrome.storage.local.get(hasher()).then((data) => {
+      data = data[hasher()];
+      data = data?.length ? data : [];
+      state = { ...state, data };
+      init();
+    });
   }
   d();
 });
