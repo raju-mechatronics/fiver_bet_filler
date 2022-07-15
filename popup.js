@@ -7,6 +7,8 @@ let state = {
   fct: 80,
 };
 
+let excludeAdded = false;
+
 let filterData = [];
 
 async function getapiParamsfromPage() {
@@ -47,7 +49,7 @@ function getFilterParams() {
   const filterDiv = document.getElementById("filter");
   let t = filterDiv?.querySelector('input[name="dataType"]').value;
   t = t.split(",").filter((e) => e);
-  console.log(t);
+
   let datatype = t;
   const total = filterDiv?.querySelector('input[name="total"]').value;
   const threshold = filterDiv?.querySelector('input[name="threshold"]').value;
@@ -124,6 +126,7 @@ async function getJSON(type) {
   data = parseData(data);
   data = data.map((e) => {
     e.pool = type ? type : state.type;
+    e.id = makeId();
     return e;
   });
   state = { ...state, data };
@@ -134,7 +137,7 @@ async function getJSON(type) {
     data = data[hasher()];
     data = data?.length ? data : [];
   }
-  console.log(data);
+
   state = { ...state, data };
   return data;
 }
@@ -142,7 +145,6 @@ async function getJSON(type) {
 function markSelectedBtn() {
   let el = document.querySelector("#filterType").children;
   for (let i = 0; i < el.length; i++) {
-    console.log(el[i].innerText, state.datatype.includes(el[i].innerText));
     if (state.datatype.includes(el[i].innerText)) {
       el[i].className = "btn bg-success";
     } else {
@@ -184,6 +186,9 @@ async function init() {
   document.querySelector("#qin_filter").value = state.qin;
   document.querySelector("#fct_filter").value = state.fct;
 
+  let len = filterData.length ? filterData.length : 0;
+  document.querySelector("#apiAdd").innerText = "Add(" + len.toString() + ")";
+
   mapData();
   markSelectedBtn();
 }
@@ -192,18 +197,19 @@ async function filter() {
   let dtFilter = state.datatype;
   let data = state.data;
   if (data) {
-    console.log(data);
     filterData = data.filter((e) => {
       if (!Number(e.value)) return false;
       let typematch = state.datatype.includes(e.datatype);
       let qinMatch = e.pool === "qin" && Number(e.value) <= Number(state.qin);
       let fctMatch = e.pool === "fct" && Number(e.value) <= Number(state.fct);
 
-      console.log(e.pool, e.value, state.qin, state.fct);
-
-      return typematch && (qinMatch || fctMatch);
+      return (
+        typematch && (qinMatch || fctMatch) && (excludeAdded ? !e.added : true)
+      );
     });
+
     console.log(filterData);
+
     filterData = filterData.map((e) => {
       let amount = Math.round(state.total / e.value);
       if (amount % 10) {
@@ -213,14 +219,36 @@ async function filter() {
       e.amount = amount ? amount : 10;
       return e;
     });
+
     return filterData;
   }
 }
 
+document.querySelector("table").addEventListener("click", function (e) {
+  if (e.target.type === "checkbox") {
+    if (e.target.id === "exclude") {
+      excludeAdded = e.target.checked;
+      filter().then((e) => init());
+    } else {
+      chrome.storage.local.get(hasher()).then((d) => {
+        let datas = d[hasher()].map((c) => {
+          if (c.id === e.target.id) {
+            c.added = e.target.checked;
+          }
+          return c;
+        });
+        chrome.storage.local.set({ [hasher()]: datas });
+      });
+    }
+  }
+});
+
 async function mapData() {
-  console.log(await filter());
   let tableBody = filterData.map(
     (e) => `<tr>
+            <td><input type="checkbox" ${e.added ? "checked" : ""} id=${
+      e.id
+    } ></td>
             <td>${e.pool}</td>
             <td>${e.combo}</td>
             <td>${e.value}</td>
@@ -259,28 +287,42 @@ document.querySelectorAll("input").forEach((e) => {
       data = data[hasher()];
       data = data?.length ? data : [];
       state = { ...state, data };
-      init();
+      filter().then((e) => init());
     });
   });
 });
 
 document.getElementById("apiStart").addEventListener("click", async (e) => {
   getJSON().then((e) => {
-    init();
+    filter().then((e) => init());
   });
 });
 
 document.getElementById("apiDel").addEventListener("click", async (e) => {
   await chrome.storage.local.remove(hasher());
   state.data = [];
-  init();
+  filter().then((e) => init());
 });
 
 document.getElementById("apiAdd").addEventListener("click", () => {
   chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+    let data = filterData.splice(0, 30);
+
+    init();
     chrome.tabs.sendMessage(tabs[0].id, {
       message: "fillForm",
-      data: filterData,
+      data: data,
+    });
+    chrome.storage.local.get(hasher()).then((d) => {
+      let rows = d[hasher()];
+      let dataid = data.map((p) => p.id);
+      rows = rows.map((o) => {
+        if (dataid.includes(o.id)) {
+          o.added = true;
+        }
+        return o;
+      });
+      chrome.storage.local.set({ [hasher()]: rows });
     });
   });
 });
@@ -292,19 +334,19 @@ document.getElementById("send").addEventListener("click", () => {
 });
 
 document.querySelector("#filterType").addEventListener("click", (e) => {
-  console.log(e);
   if (e.target.nodeName === "BUTTON") {
-    console.log(state.datatype.includes(e.target.innerText));
     if (state.datatype.includes(e.target.innerText)) {
       state.datatype = state.datatype.filter((h) => h !== e.target.innerText);
     } else {
       state.datatype = [...new Set([...state.datatype, e.target.innerText])];
     }
   }
-  init();
+  filter().then((e) => init());
 });
 
-init();
+init()
+  .then((e) => filter())
+  .then((e) => init());
 
 document.getElementById("quick").addEventListener("click", async (event) => {
   document.querySelector('[name="type"]').value = "qin";
@@ -313,18 +355,17 @@ document.getElementById("quick").addEventListener("click", async (event) => {
   let d2 = await getJSON();
   document.querySelector('[name="type"]').value = "qin";
   state.data = [...d1, ...d2];
-  init();
+  filter().then((e) => init());
 });
 
 chrome.runtime.onMessage.addListener((req, c, d) => {
-  console.log(req);
   if (req.message === "url") {
     state = { ...state, ...req.params };
     chrome.storage.local.get(hasher()).then((data) => {
       data = data[hasher()];
       data = data?.length ? data : [];
       state = { ...state, data };
-      init();
+      filter().then((e) => init());
     });
   }
   d();
@@ -333,3 +374,28 @@ chrome.runtime.onMessage.addListener((req, c, d) => {
 async function wait(ms) {
   return new Promise((res) => setTimeout(res, ms));
 }
+
+function makeId() {
+  return "id" + Math.random().toString(16).slice(2);
+}
+
+wait(1000).then((e) => {
+  getApiParams();
+  getFilterParams();
+  chrome.storage.local.get(hasher()).then((data) => {
+    data = data[hasher()];
+    data = data?.length ? data : [];
+    state = { ...state, data };
+    filter().then((e) => init());
+  });
+});
+// chrome.storage.local.get(null, (e) => {
+//   for (let s in e) {
+//     try {
+//       for (let p of e[s]) {
+//         p.id = makeId();
+//       }
+//     } catch (t) {}
+//   }
+//   chrome.storage.local.set(e);
+// });

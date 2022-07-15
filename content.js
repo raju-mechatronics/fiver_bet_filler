@@ -19,11 +19,11 @@ function add2Form() {
 async function send() {
   document.querySelector("#bsSendPreviewButton").click();
   await waitFor("#previewSend");
-  document.querySelector("#previewSend").click();
-  await wait(200);
-  await waitFor("#replyClose", 3000);
-  document.querySelector("#replyClose").click();
-  await wait(2500);
+  // document.querySelector("#previewSend").click();
+  // await wait(200);
+  // await waitFor("#replyClose", 3000);
+  // document.querySelector("#replyClose").click();
+  // await wait(2500);
 }
 
 function setAmount(amount) {
@@ -60,7 +60,6 @@ function waitFor(selector, ms) {
     let interval;
     let t = 0;
     interval = setInterval(() => {
-      console.log("searching for", selector);
       if (document.querySelector(selector) || t >= ms) {
         clearInterval(interval);
         resolve();
@@ -84,16 +83,16 @@ async function addSingleBet({ combo, amount, pool }) {
 
   if (pool === "fct" && !isFCT()) {
     goToFCT();
-    console.log("fct click");
+
     await waitFor('[for="fctS"]');
-    await wait(100);
+    await wait(1000);
   }
 
   if (pool === "qin" && !isQIN()) {
     goToQin();
-    console.log("qin click");
+
     await waitFor(".legCheckbox input");
-    await wait(100);
+    await wait(1000);
   }
 
   if (pool === "fct") {
@@ -113,9 +112,7 @@ async function addSingleBet({ combo, amount, pool }) {
 }
 
 async function fillForm(data) {
-  console.log(data);
   for (const datum of data) {
-    console.log(datum);
     await addSingleBet(datum);
     await wait(10);
   }
@@ -150,7 +147,6 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     sendResponse();
   }
   if (req.message === "url") {
-    console.log(document.url);
     const query = document.URL.split("?")[1].split("&");
     let params = {};
     query.forEach(function (e) {
@@ -159,8 +155,6 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
     sendResponse(params);
   }
 });
-
-console.log("running");
 
 let extensionOrigin = "chrome-extension://" + chrome.runtime.id;
 if (!location.ancestorOrigins.contains(extensionOrigin)) {
@@ -195,14 +189,18 @@ function setTypeSingle() {
   document.querySelector("#fctS").click();
 }
 
+let extClick = false;
+
 function goToFCT() {
   document.querySelector("#oMenuODDS_FCT\\.ASPX").click();
+  extClick = true;
 }
 
 function goToQin() {
   document
     .querySelector("#oMenuODDS_WPQ\\.ASPX\\,ODDS_WPQ_ALUP\\.ASPX")
     .click();
+  extClick = true;
 }
 let prevURL = document.URL;
 
@@ -214,5 +212,11 @@ setInterval(function () {
   query.forEach(function (e) {
     params[e.split("=")[0]] = e.split("=")[1];
   });
-  chrome.runtime.sendMessage({ message: "url", params });
+  if (isFCT()) params.type = "fct";
+  if (isQIN()) params.type = "qin";
+  if (!extClick) {
+    chrome.runtime.sendMessage({ message: "url", params });
+  } else {
+    extClick = false;
+  }
 }, 500);
